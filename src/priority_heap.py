@@ -33,3 +33,42 @@ class MaxHeap:
         self.heap[i], self.heap[j] = self.heap[j], self.heap[i]
         self.heap[i].heap_index = i
         self.heap[j].heap_index = j
+
+    def is_higher_priority(self, nodeA: CacheNode, nodeB: CacheNode) -> bool:
+        """
+        Returns True if nodeA strictly outranks nodeB.
+        Rule 1: Higher frequency wins.
+        Rule 2 (Tie-breaker): If frequencies are equal, newer (higher) timestamp wins.
+        """
+        if nodeA.frequency != nodeB.frequency:
+            return nodeA.frequency > nodeB.frequency
+        return nodeA.last_accessed_timestamp > nodeB.last_accessed_timestamp
+    
+    def sift_up(self, index: int) -> None:
+        """Bubbles the node at `index` up the heap until max-heap priority is restored."""
+        while index > 0:
+            parent_idx = (index - 1) // 2
+            if self.is_higher_priority(self.heap[index], self.heap[parent_idx]):
+                self.swap_nodes(index, parent_idx)
+                index = parent_idx
+            else:
+                break
+
+    def sift_down(self, index: int) -> None:
+        """Bubbles the node at `index` down the heap until max-heap priority is restored."""
+        size = len(self.heap)
+        while True:
+            highest = index
+            left = 2 * index + 1
+            right = 2 * index + 2
+
+            if left < size and self.is_higher_priority(self.heap[left], self.heap[highest]):
+                highest = left
+            if right < size and self.is_higher_priority(self.heap[right], self.heap[highest]):
+                highest = right
+
+            if highest != index:
+                self.swap_nodes(index, highest)
+                index = highest
+            else:
+                break
