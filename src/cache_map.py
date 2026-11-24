@@ -1,126 +1,134 @@
 """
-cache_map.py  --  Custom Hash Map (separate chaining) for the Predictive Cache Simulator.
+cache_map.py - Hash Map Layer (by Gauri)
 
-Owner: Priyanshi (Hash Map & Ingestion Lead)
+Maps a page URL to its CacheNode (frequency + last access time) using a
+hash table built from scratch: a list of buckets, separate chaining for
+collisions, and an FNV-1a hash function. No dict / set / Counter is used
+inside the map itself.
 
-Maps  normalized URL string -> CacheNode  in O(1) average time.
-The map only stores *references* to CacheNode objects; the same objects live
-in Eetal's MaxHeap, so updating a node here updates it there too.
+
+Average time per operation is O(1) when buckets are short; the worst case is
+O(n) if every URL lands in one bucket. Space is O(n) for n unique URLs.
 """
+
 from typing import Iterator, List, Optional
 
-from heap_adapter import CacheNode
 
-DEFAULT_BUCKET_COUNT = 2048   # initial table size (plan suggests 1024 or 2048)
-MAX_LOAD_FACTOR = 0.75        # grow the table when size / buckets exceeds this
+class CacheNode:
+    def __init__(self, url: str, timestamp: int, frequency: int = 1, heap_index: int = -1):
+        self.url = url
+        self.frequency = frequency
+        self.last_accessed_timestamp = timestamp
+        self.heap_index = heap_index
 
-# FNV-1a 32-bit constants
-_FNV_OFFSET_BASIS = 0x811C9DC5
-_FNV_PRIME = 0x01000193
-_MASK_32 = 0xFFFFFFFF
-
-
-# --------------------------------------------------------------------------
-# URL normalization
-# --------------------------------------------------------------------------
-def normalize_url(raw_url) -> Optional[str]:
-    """
-    Clean a raw URL. Returns the normalized string, or None if invalid.
-
-    Steps: reject non-strings -> strip whitespace -> lowercase ->
-    reject empty strings and strings with internal whitespace/control chars.
-    """
-    if not isinstance(raw_url, str):
-        return None
-    url = raw_url.strip().lower()
-    if not url:
-        return None
-    if any(ch.isspace() or ord(ch) < 32 for ch in url):
-        return None
-    return url
+    def __repr__(self):
+        return (f"CacheNode(url='{self.url}', freq={self.frequency}, "
+                f"ts={self.last_accessed_timestamp}, idx={self.heap_index})")
 
 
-# --------------------------------------------------------------------------
-# Hashing
-# --------------------------------------------------------------------------
-def fnv1a_hash(text: str) -> int:
-    """32-bit FNV-1a hash of `text` (UTF-8 bytes). Deterministic across runs."""
-    h = _FNV_OFFSET_BASIS
-    for byte in text.encode("utf-8"):
-        h ^= byte
-        h = (h * _FNV_PRIME) & _MASK_32
-    return h
+# FNV-1a 32-bit constants (public, standard values)
+FNV_OFFSET_BASIS = 2166136261
+FNV_PRIME = 16777619
 
 
-# --------------------------------------------------------------------------
-# Hash map
-# --------------------------------------------------------------------------
+def fnv1a_hash(key: str) -> int:
+    hash_value = FNV_OFFSET_BASIS
+    for byte in key.encode("utf-8"):
+        hash_value ^= byte
+        hash_value = (hash_value * FNV_PRIME) & 0xFFFFFFFF
+    return hash_value
+
+
 class CustomHashMap:
-    """
-    Hash map using separate chaining: each bucket is a Python list of
-    CacheNode references. Keys must already be normalized (see normalize_url);
-    the IngestionEngine does that before calling in here.
-    """
+    DEFAULT_BUCKETS = 1024
 
-    def __init__(self, bucket_count: int = DEFAULT_BUCKET_COUNT):
-        if not isinstance(bucket_count, int) or bucket_count <= 0:
-            raise ValueError("bucket_count must be a positive integer")
-        self._buckets: List[List[CacheNode]] = [[] for _ in range(bucket_count)]
+    def __init__(self, num_buckets: int = DEFAULT_BUCKETS):
+        # num_buckets is a parameter only so tests can force collisions
+        # (e.g. 1 bucket). The project itself always uses the default 1024.
+        if not isinstance(num_buckets, int) or isinstance(num_buckets, bool) or num_buckets < 1:
+            raise ValueError("num_buckets must be an integer >= 1")
+        self.num_buckets = num_buckets
+        # List of lists: buckets[i] is the chain of nodes whose hash maps to i.
+        self.buckets: List[List[CacheNode]] = [[] for _ in range(num_buckets)]
         self._size = 0
 
-    # ---- introspection ----
-    @property
-    def bucket_count(self) -> int:
-        return len(self._buckets)
+    # ---------- helpers ----------
 
-    def __len__(self) -> int:
-        return self._size
+    @staticmethod
+    def _is_valid_url(url) -> bool:
+        """A usable key is a non-empty string (cleaning is the stream layer's job)."""
+        return isinstance(url, str) and url.strip() != ""
 
-    def __contains__(self, url: str) -> bool:
-        return self.get(url) is not None
-
-    def __iter__(self) -> Iterator[CacheNode]:
-        for bucket in self._buckets:
-            yield from bucket
-
-    # ---- core operations ----
     def _bucket_index(self, url: str) -> int:
-        """Convert a URL into a valid bucket index in [0, bucket_count)."""
-        return fnv1a_hash(url) % len(self._buckets)
+        """URL -> number in 0 .. num_buckets-1."""
+        return fnv1a_hash(url) % self.num_buckets
+
+    # ---------- required API ----------
+
+    def insert(self, url: str) -> CacheNode:
+        """
+        Create and store a node for a URL not seen before.
+
+        The new node starts at frequency 0, timestamp 0, heap_index -1; the
+        pipeline calls update_access() right after to make it frequency 1.
+        If the URL already exists, the existing node is returned and nothing
+        is duplicated. Invalid URLs (not a string / empty) raise ValueError.
+        """
+        if not self._is_valid_url(url):
+            raise ValueError(f"invalid URL: {url!r}")
+        bucket = self.buckets[self._bucket_index(url)]
+        for node in bucket:                      # collision check
+            if node.url == url:
+                return node
+        node = CacheNode(url, 0, 0, -1)
+        bucket.append(node)
+        self._size += 1
+        return node
 
     def get(self, url: str) -> Optional[CacheNode]:
-        """
-        Return the node for `url`, or None if absent.
-        Hash collisions are handled by scanning the bucket and comparing the
-        actual URL strings. Average O(1) given a healthy load factor.
-        """
-        for node in self._buckets[self._bucket_index(url)]:
+        if not self._is_valid_url(url):
+            return None
+        for node in self.buckets[self._bucket_index(url)]:
             if node.url == url:
                 return node
         return None
 
-    def insert(self, node: CacheNode) -> bool:
-        """
-        Add `node` if its URL is unseen. Returns True if inserted, False if the
-        URL already exists (the existing node is NOT overwritten).
-        """
-        bucket = self._buckets[self._bucket_index(node.url)]
-        for existing in bucket:
-            if existing.url == node.url:
-                return False
-        bucket.append(node)
-        self._size += 1
-        if self._size / len(self._buckets) > MAX_LOAD_FACTOR:
-            self._resize(len(self._buckets) * 2)
-        return True
+    def update_access(self, url: str, tick: int) -> CacheNode:
+        if not isinstance(tick, int) or isinstance(tick, bool):
+            raise TypeError(f"tick must be an int, got {type(tick).__name__}")
+        node = self.get(url)
+        if node is None:
+            raise KeyError(url)
+        node.frequency += 1
+        node.last_accessed_timestamp = tick
+        return node
 
-    def _resize(self, new_bucket_count: int) -> None:
-        """
-        Rehash every node into a bigger table. Nodes themselves are reused, so
-        their heap_index stays valid; only the bucket lists change.
-        """
-        old_buckets = self._buckets
-        self._buckets = [[] for _ in range(new_bucket_count)]
-        for bucket in old_buckets:
+    # ---------- extras (tests, benchmarks, report numbers) ----------
+
+    def __len__(self) -> int:
+        """Number of unique URLs stored."""
+        return self._size
+
+    def __contains__(self, url) -> bool:
+        return self.get(url) is not None
+
+    def nodes(self) -> Iterator[CacheNode]:
+        """Iterate over every stored node (no particular order)."""
+        for bucket in self.buckets:
             for node in bucket:
-                self._buckets[self._bucket_index(node.url)].append(node)
+                yield node
+
+    def bucket_lengths(self) -> List[int]:
+        """Chain length of every bucket."""
+        return [len(bucket) for bucket in self.buckets]
+
+    def stats(self) -> dict:
+        """Chain-length summary, handy for the complexity / efficiency section."""
+        lengths = self.bucket_lengths()
+        return {
+            "unique_urls": self._size,
+            "buckets": self.num_buckets,
+            "avg_chain": self._size / self.num_buckets,
+            "max_chain": max(lengths),
+            "empty_buckets": lengths.count(0),
+        }
