@@ -59,6 +59,23 @@ def generate_looping_traffic(length=10000, pattern=None):
 
 
 # ---------------------------------------------------------------------------
+# Zipfian traffic: a few pages get most of the clicks (real-world skew)
+# ---------------------------------------------------------------------------
+def generate_zipfian_traffic(length=10000, pool=PAGE_POOL, exponent=1.35, seed=42):
+    """
+    Return `length` URLs where page popularity follows a Zipf distribution.
+
+    The page at rank r (1 = most popular) gets weight 1 / r**exponent.
+    pool[0] ("/home") is rank 1, so it is the most visited page.
+    With 50 pages and exponent 1.35, the top 20% of pages (10 pages)
+    receive about 80% of all clicks.
+    """
+    rng = random.Random(seed)
+    weights = [1.0 / (rank ** exponent) for rank in range(1, len(pool) + 1)]
+    return rng.choices(pool, weights=weights, k=length)
+
+
+# ---------------------------------------------------------------------------
 # Quick self-check: run `python workloads.py`
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
@@ -71,3 +88,11 @@ if __name__ == "__main__":
 
     for event in to_events(loop[:4]):
         print(event)
+
+    from collections import Counter
+    zipf = generate_zipfian_traffic(length=100000)
+    counts = Counter(zipf).most_common()
+    top_20_percent = sum(c for _, c in counts[: len(PAGE_POOL) // 5])
+    print("Zipfian : top 5 pages:", counts[:5])
+    print("Share of clicks going to top 20% of pages: "
+          f"{100 * top_20_percent / len(zipf):.1f}%")
