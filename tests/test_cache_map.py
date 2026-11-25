@@ -127,7 +127,7 @@ class TestGet(unittest.TestCase):
 
 class TestCollisions(unittest.TestCase):
     def test_single_bucket_forces_every_collision(self):
-        m = CustomHashMap(1)
+        m = CustomHashMap(1, max_load_factor=None)   # <- was CustomHashMap(1)
         nodes = {u: m.insert(u) for u in ("/a", "/b", "/c", "/d")}
         self.assertEqual(m.bucket_lengths(), [4])
         for url, node in nodes.items():
