@@ -4,7 +4,6 @@ Tests for src/cache_map.py (Hash Map Layer).
 
 import os
 import random
-import re
 import sys
 import unittest
 from collections import Counter
@@ -12,9 +11,6 @@ from collections import Counter
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 
 from cache_map import CacheNode, CustomHashMap, fnv1a_hash  # noqa: E402
-
-NASA_CSV = os.environ.get("NASA_CSV")
-_URL_PATTERN = re.compile(r'""[A-Z]+ (\S+)')
 
 
 class TestCacheNode(unittest.TestCase):
@@ -262,29 +258,6 @@ class TestBoundaryAndStress(unittest.TestCase):
         self.assertEqual(s["buckets"], 1024)
         self.assertGreaterEqual(s["max_chain"], 1)
         self.assertEqual(s["empty_buckets"], 1024 - sum(1 for x in m.bucket_lengths() if x))
-
-
-@unittest.skipUnless(NASA_CSV and os.path.exists(NASA_CSV),
-                     "set NASA_CSV to the NASA log path to run the real-data test")
-class TestRealData(unittest.TestCase):
-    def test_first_50000_nasa_urls_match_counter(self):
-        urls = []
-        with open(NASA_CSV, encoding="latin-1") as f:
-            for line in f:
-                match = _URL_PATTERN.search(line)
-                if match:
-                    urls.append(match.group(1))
-                if len(urls) == 50000:
-                    break
-        m = CustomHashMap()
-        for tick, url in enumerate(urls, start=1):
-            if m.get(url) is None:
-                m.insert(url)
-            m.update_access(url, tick)
-        expected = Counter(urls)
-        self.assertEqual(len(m), len(expected))
-        for url, count in expected.items():
-            self.assertEqual(m.get(url).frequency, count)
 
 
 if __name__ == "__main__":

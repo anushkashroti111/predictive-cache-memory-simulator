@@ -1,13 +1,12 @@
 """
 Efficiency check for the Hash Map Layer
-Feeds the first N requests of the NASA log into CustomHashMap and reports
-time, memory and bucket-chain statistics
+Feeds the first N requests from the Hugging Face access logs into
+CustomHashMap and reports time, memory, and bucket-chain statistics.
 """
 
 import argparse
 import csv
 import os
-import re
 import sys
 import time
 import tracemalloc
@@ -16,21 +15,7 @@ from collections import Counter
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
 
 from cache_map import CustomHashMap  # noqa: E402
-
-_URL_PATTERN = re.compile(r'""[A-Z]+ (\S+)')
-
-
-def load_urls(path: str, limit: int):
-    """First `limit` request URLs from the NASA log"""
-    urls = []
-    with open(path, encoding="latin-1") as f:
-        for line in f:
-            match = _URL_PATTERN.search(line)
-            if match:
-                urls.append(match.group(1))
-                if len(urls) == limit:
-                    break
-    return urls
+from workloads import load_web_server_log_urls  # noqa: E402
 
 
 def run_stream(urls):
@@ -44,13 +29,16 @@ def run_stream(urls):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Benchmark CustomHashMap on the NASA log")
-    parser.add_argument("nasa_csv", help="path to nasa_dataset.csv")
-    parser.add_argument("--n", type=int, default=500000, help="number of requests (default 500000)")
+    parser = argparse.ArgumentParser(
+        description="Benchmark CustomHashMap on Hugging Face web-server logs"
+    )
+    parser.add_argument("--n", type=int, default=5000, help="maximum requests (default 5000)")
     parser.add_argument("--csv", help="optional file to save the results to")
     args = parser.parse_args()
 
-    urls = load_urls(args.nasa_csv, args.n)
+    if args.n < 1:
+        parser.error("--n must be a positive integer")
+    urls = list(load_web_server_log_urls(limit=args.n))
     print(f"Loaded {len(urls):,} requests")
 
     # Pass 1: timing only (tracemalloc would slow it down)

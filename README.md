@@ -1,72 +1,84 @@
-
 # Predictive Cache & Memory Access Simulator
 
-## 1. Project Overview
+A Python simulator that processes web request paths through a custom hash map,
+max heap, and frequency/recency predictor. The simulator reports prediction
+hits and misses, accuracy, unique paths, elapsed time, and the three highest
+priority paths.
 
-The Predictive Cache & Memory Access Simulator is a Data Structures project that aims to simulate the process of memory access and cache management.
+## Data source
 
-The project focuses on understanding how data is accessed, stored, and retrieved from memory and how cache mechanisms can help improve access efficiency.
+The real request stream comes from the two configurations of
+[`mindweave/web-server-logs`](https://huggingface.co/datasets/mindweave/web-server-logs):
 
-## 2. Problem Statement
+- `access_logs`: each row contributes its `path` as a cache request.
+- `servers`: server IDs are loaded and used to validate access-log references.
 
-In computer systems, accessing data from main memory can take more time compared to accessing data from cache memory.
+The public Hugging Face version is a synthetic free sample containing 5,000
+access-log rows and 3 server rows. Its dataset card declares CC BY-NC 4.0, so
+observe the non-commercial license terms. The full dataset is separately
+distributed by its publisher.
 
-Efficient cache management is important for reducing memory access time and improving overall system performance.
+Install the runtime dependency:
 
-The objective of this project is to develop a simulator that demonstrates memory access operations and explores predictive cache management techniques.
-
-## 3. Objectives
-
-- Understand the concept of cache memory and memory access.
-- Simulate memory access operations.
-- Explore cache management and replacement techniques.
-- Study how prediction can help improve cache performance.
-- Analyse cache hits, cache misses, and memory access behaviour.
-
-## 4. Data Structures Used
-
-The data structures used in the project will be finalised based on the implementation.
-
-Possible data structures include:
-- Arrays
-- Queues
-- Hash Tables
-- Linked Lists
-
-## 5. Project Structure
-
-```text
-predictive-cache-memory-simulator/
-│
-├── src/
-│   └── Source code files
-│
-├── tests/
-│   └── Test case files
-│
-├── docs/
-│   └── Project documentation
-│
-└── README.md
+```powershell
+python -m pip install -r requirements.txt
 ```
 
-## 6. Expected Outcome
+Run the access-log simulation (writes one detailed row to
+`web_server_logs_results.csv`):
 
-The expected outcome is a working simulator that demonstrates memory access and cache behaviour and helps analyse the effectiveness of cache management strategies.
+```powershell
+python src\main.py --dataset web-server-logs --csv web_server_logs_results.csv
+```
 
-## 7. Team Members
+To process only the first 1,000 requests:
 
-- Member 1: Priyanshi Chauhan
-- Member 2: Priyanshi Saini 
-- Member 3: Gauri Sharma 
-- Member 4: Shivangi Patel
-- Member 5: Anushka Shrotriya
+```powershell
+python src\main.py --dataset web-server-logs --limit 1000
+```
 
-## 8. Project Status
+## Synthetic benchmarks
 
-Currently in the initial setup and documentation phase.
+Running without `--dataset` retains the reproducible random, looping, and
+Zipfian benchmarks at 1,000, 50,000, and 500,000 requests each:
 
-## 9. Future Scope
+```powershell
+python src\main.py --csv benchmark_results.csv
+```
 
-The project may be extended with additional cache prediction techniques, performance comparisons, and improved visualisation of memory access operations.
+The output CSV is replaced on each run and contains one row per workload,
+including the request count, hit/miss counts, accuracy, latency, unique path
+count, and top-three paths.
 
+Benchmark the hash map itself against the selected access-log data:
+
+```powershell
+python tests\benchmark_cache_map.py --n 5000
+```
+
+## Tests
+
+```powershell
+python -m pytest -q
+```
+
+The dataset-loader tests use a small in-memory fixture, so the ordinary test
+suite does not require network access or download the Hugging Face dataset.
+
+## Implementation
+
+- `src/cache_map.py`: separate-chaining hash map with FNV-1a hashing.
+- `src/priority_heap.py`: max heap ranked by request frequency and recency.
+- `src/ingestion.py`: shared request normalization and metadata update pipeline.
+- `src/predictor.py`: predicts the current highest-priority path.
+- `src/workloads.py`: synthetic workloads and Hugging Face access-log loader.
+- `src/main.py`: simulation, benchmark suite, and command-line interface.
+- `src/metrics.py`: hit/miss tracking and top-k extraction.
+
+## Team
+
+- Priyanshi Chauhan
+- Priyanshi Saini
+- Gauri Sharma
+- Shivangi Patel
+- Anushka Shrotriya

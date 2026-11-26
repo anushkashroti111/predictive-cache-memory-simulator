@@ -91,17 +91,11 @@ class HitMissTracker:
         }
 
     def export_csv(self, path, workload="unknown"):
-        """
-        Append this run's numbers as one row of a CSV file.
-        The header is written only if the file is new, so every benchmark
-        run can write into the same file.
-        """
+        """Write this metrics-only summary as a single-row CSV."""
         columns = ["workload", "total_steps", "hits", "misses", "accuracy"]
-        is_new_file = not os.path.exists(path) or os.path.getsize(path) == 0
-        with open(path, "a", newline="") as f:
+        with open(path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=columns)
-            if is_new_file:
-                writer.writeheader()
+            writer.writeheader()
             writer.writerow({"workload": workload, **self.summary()})
 
 
@@ -128,5 +122,6 @@ if __name__ == "__main__":
     tracker.record("/home", "/home")     # hit
     print(tracker.summary())             # 4 steps, 2 hits, 50.0%
     tracker.export_csv("demo_results.csv", workload="demo")
-    print(open("demo_results.csv").read())
+    with open("demo_results.csv", encoding="utf-8") as result_file:
+        print(result_file.read())
     os.remove("demo_results.csv")

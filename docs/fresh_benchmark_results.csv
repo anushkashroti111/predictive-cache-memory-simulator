@@ -1,0 +1,10 @@
+workload,total_steps,hits,misses,accuracy,latency_ms,unique_urls,top_3_pages
+random_small,1000,23,977,2.3,5.95,50,"['/page15', '/page42', '/page17']"
+looping_small,1000,0,1000,0.0,4.07,3,"['/pagea', '/pagec', '/pageb']"
+zipfian_small,1000,348,652,34.8,3.93,48,"['/home', '/page1', '/page2']"
+random_medium,50000,995,49005,1.99,455.04,50,"['/page36', '/page25', '/page44']"
+looping_medium,50000,0,50000,0.0,522.73,3,"['/pageb', '/pagea', '/pagec']"
+zipfian_medium,50000,18276,31724,36.55,513.11,50,"['/home', '/page1', '/page2']"
+random_large,500000,10024,489976,2.0,4013.47,50,"['/page6', '/page40', '/page44']"
+looping_large,500000,0,500000,0.0,3567.02,3,"['/pageb', '/pagea', '/pagec']"
+zipfian_large,500000,182522,317478,36.5,3218.07,50,"['/home', '/page1', '/page2']"

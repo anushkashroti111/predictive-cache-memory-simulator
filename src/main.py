@@ -1,15 +1,42 @@
+import argparse
+import csv
+import json
 import time
 from typing import Iterable, List, Optional
 
 from cache_map import CustomHashMap, normalize_url
+from ingestion import IngestionEngine
 from metrics import HitMissTracker, get_top_k
 from predictor import CachePredictor
-from priority_heap import MaxHeap
 from workloads import (
     generate_looping_traffic,
     generate_random_traffic,
     generate_zipfian_traffic,
+    load_web_server_log_urls,
 )
+
+
+BENCHMARK_COLUMNS = [
+    "workload",
+    "total_steps",
+    "hits",
+    "misses",
+    "accuracy",
+    "latency_ms",
+    "unique_urls",
+    "top_3_pages",
+]
+
+
+def _write_results_csv(path: str, results: List[dict]) -> None:
+    """Replace the CSV with the supplied run results and a stable schema."""
+    with open(path, "w", newline="", encoding="utf-8") as output:
+        writer = csv.DictWriter(output, fieldnames=BENCHMARK_COLUMNS)
+        writer.writeheader()
+        for result in results:
+            row = dict(result)
+            row["top_3_pages"] = json.dumps(row["top_3_pages"])
+            writer.writerow(row)
 
 
 def run_simulation(
@@ -18,12 +45,10 @@ def run_simulation(
     num_buckets: int = CustomHashMap.DEFAULT_BUCKETS,
     csv_output_path: Optional[str] = None,
 ) -> dict:
-    heap = MaxHeap()
-    cache_map = CustomHashMap(num_buckets=num_buckets)
-    predictor = CachePredictor(heap)
+    engine = IngestionEngine(hash_map=CustomHashMap(num_buckets=num_buckets))
+    predictor = CachePredictor(engine.heap)
     tracker = HitMissTracker()
 
-    sequence_tick = 0
     start_time = time.perf_counter()
 
     for raw_url in url_stream:
@@ -31,31 +56,22 @@ def run_simulation(
         if url is None:
             continue
 
-        sequence_tick += 1
-
         # 1. Predict BEFORE processing current request at step T
         predicted_url = predictor.predict_next()
         tracker.record(predicted_url, url)
 
-        # 2. Insert/update metadata in Hash Map
-        node = cache_map.insert(url)
-        cache_map.update_access(url, sequence_tick)
-
-        # 3. Insert into MaxHeap if new, then restore max-heap property
-        if node.heap_index == -1:
-            heap.raw_insert(node)
-        heap.sift_up(node.heap_index)
+        # IngestionEngine owns map, frequency, timestamp, and heap updates.
+        engine.process_request(url)
 
     elapsed_ms = (time.perf_counter() - start_time) * 1000.0
 
-    if csv_output_path:
-        tracker.export_csv(csv_output_path, workload=workload_name)
-
     results = tracker.summary()
     results["workload"] = workload_name
-    results["unique_urls"] = len(cache_map)
+    results["unique_urls"] = len(engine.hash_map)
     results["latency_ms"] = round(elapsed_ms, 2)
-    results["top_3_pages"] = [n.url for n in get_top_k(heap, 3)]
+    results["top_3_pages"] = [n.url for n in get_top_k(engine.heap, 3)]
+    if csv_output_path:
+        _write_results_csv(csv_output_path, [results])
     return results
 
 
@@ -79,7 +95,6 @@ def run_full_benchmark_suite(output_csv: str = "benchmark_results.csv") -> List[
             res = run_simulation(
                 url_stream=stream,
                 workload_name=workload_id,
-                csv_output_path=output_csv,
             )
             all_results.append(res)
             print(
@@ -87,8 +102,30 @@ def run_full_benchmark_suite(output_csv: str = "benchmark_results.csv") -> List[
                 f"Hits: {res['hits']:<7} | Accuracy: {res['accuracy']:>6.2f}% | "
                 f"Time: {res['latency_ms']:>8.2f} ms | Top-3: {res['top_3_pages']}"
             )
+    _write_results_csv(output_csv, all_results)
     return all_results
 
 
 if __name__ == "__main__":
-    run_full_benchmark_suite()
+    parser = argparse.ArgumentParser(description="Predictive cache simulator")
+    parser.add_argument(
+        "--dataset",
+        choices=("synthetic", "web-server-logs"),
+        default="synthetic",
+        help="request source (default: synthetic benchmark suite)",
+    )
+    parser.add_argument("--limit", type=int, help="maximum access-log rows to process")
+    parser.add_argument("--csv", default="benchmark_results.csv", help="results CSV path")
+    args = parser.parse_args()
+
+    if args.dataset == "web-server-logs":
+        results = run_simulation(
+            load_web_server_log_urls(limit=args.limit),
+            workload_name="web-server-logs",
+            csv_output_path=args.csv,
+        )
+        print(results)
+    else:
+        if args.limit is not None:
+            parser.error("--limit is only supported with --dataset web-server-logs")
+        run_full_benchmark_suite(output_csv=args.csv)

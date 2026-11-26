@@ -10,6 +10,48 @@ import random
 from dataclasses import dataclass
 
 
+WEB_SERVER_LOG_DATASET = "mindweave/web-server-logs"
+
+
+def load_web_server_log_urls(limit=None):
+    """Load request paths from the Hugging Face access logs config."""
+    if limit is not None and (
+        not isinstance(limit, int) or isinstance(limit, bool) or limit < 0
+    ):
+        raise ValueError("limit must be a non-negative integer or None")
+
+    try:
+        from datasets import load_dataset
+    except ImportError as exc:
+        raise RuntimeError(
+            "Loading Hugging Face data requires the 'datasets' package; "
+            "install it with `pip install -r requirements.txt`."
+        ) from exc
+
+    servers = load_dataset(WEB_SERVER_LOG_DATASET, "servers")
+    access_logs = load_dataset(WEB_SERVER_LOG_DATASET, "access_logs")
+    server_ids = {row["id"] for row in servers["train"]}
+
+    def request_paths():
+        count = 0
+        if limit == 0:
+            return
+        for row in access_logs["train"]:
+            if row["server_id"] not in server_ids:
+                raise ValueError(
+                    f"access log references unknown server id {row['server_id']!r}"
+                )
+            path = row["path"]
+            if not isinstance(path, str) or not path.strip():
+                raise ValueError(f"access log has an invalid path: {path!r}")
+            yield path
+            count += 1
+            if limit is not None and count >= limit:
+                break
+
+    return request_paths()
+
+
 # ---------------------------------------------------------------------------
 # Event model
 # ---------------------------------------------------------------------------
