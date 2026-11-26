@@ -168,6 +168,42 @@ Comparing policies buffers the shared input sequence (O(N)) so both receive
 identical accesses. Measured processing time excludes workload generation and
 Top-K report extraction.
 
+## Interactive dashboard
+
+The optional web dashboard is a thin API/frontend layer around the existing
+Python DSA implementation. It does not modify or replace `src/`.
+
+Install backend dependencies:
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+Start the API:
+
+```bash
+python3 -m uvicorn api:app --reload --port 8000
+```
+
+In a second terminal, install and start the frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173`. The API health check is available at
+`http://localhost:8000/api/health`.
+
+The existing CLI and tests remain available from the repository root:
+
+```bash
+python3 src/main.py
+python3 -m pytest -q
+python3 -m unittest discover -s tests -v
+```
+
 ## Team
 
 - Priyanshi Chauhan
