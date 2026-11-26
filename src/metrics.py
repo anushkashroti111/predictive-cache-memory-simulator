@@ -34,14 +34,13 @@ def get_top_k(heap, k):
 
     def key(index):
         node = array[index]
-        # heapq is a min-heap, so negate to get "highest frequency first",
-        # then "newest timestamp first" as the tie-breaker.
-        return (-node.frequency, -node.last_accessed_timestamp, index)
+        # Match MaxHeap ordering, then use the array index as a final stable key.
+        return (-node.frequency, -node.last_accessed_timestamp, node.url, index)
 
     temp = [key(0)]          # temporary structure holding candidates
     leaders = []
     while temp and len(leaders) < k:
-        _, _, index = heapq.heappop(temp)
+        _, _, _, index = heapq.heappop(temp)
         leaders.append(array[index])
         for child in (2 * index + 1, 2 * index + 2):
             if child < len(array):

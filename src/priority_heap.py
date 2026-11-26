@@ -38,11 +38,14 @@ class MaxHeap:
         """
         Returns True if nodeA strictly outranks nodeB.
         Rule 1: Higher frequency wins.
-        Rule 2 (Tie-breaker): If frequencies are equal, newer (higher) timestamp wins.
+        Rule 2: Newer timestamp wins when frequencies are equal.
+        Rule 3: Lexicographically smaller URL wins if both fields are equal.
         """
         if nodeA.frequency != nodeB.frequency:
             return nodeA.frequency > nodeB.frequency
-        return nodeA.last_accessed_timestamp > nodeB.last_accessed_timestamp
+        if nodeA.last_accessed_timestamp != nodeB.last_accessed_timestamp:
+            return nodeA.last_accessed_timestamp > nodeB.last_accessed_timestamp
+        return nodeA.url < nodeB.url
     
     def sift_up(self, index: int) -> None:
         """Bubbles the node at `index` up the heap until max-heap priority is restored."""

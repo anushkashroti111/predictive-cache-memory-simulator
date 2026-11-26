@@ -2,8 +2,8 @@
 workloads.py
 Traffic generators for the Predictive Cache & Memory Access Simulator.
 
-Every generator returns a plain list of URL strings, so any workload
-can be plugged into the simulator the same way.
+Synthetic generators return lists of URL strings. The Hugging Face loader
+yields access-log paths one at a time.
 """
 
 import random

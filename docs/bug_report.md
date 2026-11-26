@@ -43,3 +43,19 @@
 - **Resolution:** Main benchmark output replaces the previous CSV and writes the full eight-column result schema. One-off simulations write one complete row; the standalone metrics exporter replaces its metrics-only CSV rather than appending duplicate runs.
 - **Impact:** Benchmark artifacts are difficult to compare and may violate the no-duplicates requirement.
 - **Status:** Resolved
+
+## DEF-006 - Prediction metrics counted the no-history warm-up
+
+- **Severity:** Medium
+- **File and function:** `src/main.py`, `run_simulation`
+- **Description:** The first request was compared with `None` and counted as a miss, so an N-access stream reported N predictions despite having only N-1 next-access opportunities.
+- **Resolution:** The first valid item now warms the predictor. Each subsequent actual item is scored against prior state before it is ingested. The final item is not followed by an unobservable prediction.
+- **Status:** Resolved
+
+## DEF-007 - Advanced prediction policy and complete tie ordering were missing
+
+- **Severity:** Low
+- **File and function:** `src/transition_predictor.py`; `src/priority_heap.py`; `src/metrics.py`
+- **Description:** The project had only the frequency/recency predictor and did not define a final ordering for equal-frequency, equal-timestamp heap nodes.
+- **Resolution:** Added a separate transition-frequency policy with baseline fallback and lexical successor tie-breaking. Heap and Top-K now use URL order for any remaining tie.
+- **Status:** Resolved

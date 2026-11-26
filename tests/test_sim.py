@@ -13,10 +13,11 @@ sys.path.insert(0, SRC)
 
 from cache_map import CustomHashMap, fnv1a_hash
 from ingestion import IngestionEngine
-from main import run_simulation
+from main import compare_prediction_policies, run_simulation
 from metrics import HitMissTracker, get_top_k
 from predictor import CachePredictor
 from priority_heap import CacheNode, MaxHeap
+from transition_predictor import TransitionPredictor
 from workloads import (
     PAGE_POOL,
     generate_looping_traffic,
@@ -119,6 +120,17 @@ def test_sim_007_heap_priority_and_tiebreaker():
     assert heap.heap[0].url == "/newer"
     heap.sift_down(0)
     assert heap_is_valid(heap)
+
+
+def test_heap_and_top_k_resolve_complete_ties_deterministically():
+    heap = MaxHeap()
+    for url in ("/z", "/m", "/a"):
+        node = CacheNode(url, 10, 3)
+        heap.raw_insert(node)
+        heap.sift_up(node.heap_index)
+
+    assert heap.heap[0].url == "/a"
+    assert [node.url for node in get_top_k(heap, 3)] == ["/a", "/m", "/z"]
 
 
 def test_sim_008_predictor_root_and_no_mutation():
@@ -243,9 +255,13 @@ def test_sim_018_benchmark_combinations(size, workload):
     else:
         stream = generate_zipfian_traffic(length=size, seed=42)
     result = run_simulation(stream, workload_name=f"{workload}_{size}")
-    assert result["total_steps"] == size
-    assert result["hits"] + result["misses"] == size
-    assert result["accuracy"] == round(result["hits"] / size * 100, 2)
+    assert result["input_accesses"] == size
+    assert result["evaluated_predictions"] == size - 1
+    assert result["total_steps"] == size - 1
+    assert result["hits"] + result["misses"] == result["evaluated_predictions"]
+    assert result["accuracy"] == round(
+        result["hits"] / result["evaluated_predictions"] * 100, 2
+    )
 
 
 def test_huggingface_loader_reads_both_configs_and_limits_rows(monkeypatch):
@@ -315,12 +331,66 @@ def test_simulation_csv_includes_benchmark_details(tmp_path):
     output = tmp_path / "results.csv"
     result = run_simulation(["/home", "/home", "/docs"], csv_output_path=str(output))
 
-    assert result["total_steps"] == 3
+    assert result["input_accesses"] == 3
+    assert result["evaluated_predictions"] == 2
     lines = output.read_text(encoding="utf-8").splitlines()
-    assert lines[0] == (
-        "workload,total_steps,hits,misses,accuracy,latency_ms,unique_urls,top_3_pages"
+    assert lines[0].startswith(
+        "workload,policy,input_accesses,unique_urls,total_steps,"
+        "evaluated_predictions,correct_predictions,incorrect_predictions"
     )
     assert len(lines) == 2
+
+
+def test_simulation_excludes_warmup_and_unpredicted_future():
+    empty = run_simulation([])
+    single = run_simulation(["/only"])
+    two = run_simulation(["/first", "/second"])
+
+    assert (empty["input_accesses"], empty["evaluated_predictions"]) == (0, 0)
+    assert (single["input_accesses"], single["evaluated_predictions"]) == (1, 0)
+    assert (two["input_accesses"], two["evaluated_predictions"]) == (2, 1)
+    assert two["hits"] + two["misses"] == 1
+
+
+def test_transition_predictor_fallback_and_tie_break():
+    predictor = TransitionPredictor()
+    assert predictor.predict_next("/unseen", fallback="/fallback") == "/fallback"
+
+    predictor.record_transition("/source", "/z")
+    predictor.record_transition("/source", "/b")
+    assert predictor.predict_next("/source") == "/b"
+
+
+def test_transition_policy_learns_looping_successors():
+    stream = generate_looping_traffic(length=30, pattern=["/a", "/b", "/c"])
+    results = compare_prediction_policies(stream, workload_name="looping")
+    baseline, transition = results
+
+    assert baseline["evaluated_predictions"] == transition["evaluated_predictions"] == 29
+    assert baseline["hits"] == 0
+    assert transition["hits"] == 26
+    assert transition["accuracy"] > baseline["accuracy"]
+
+
+def test_policy_comparison_uses_identical_opportunities():
+    results = compare_prediction_policies(
+        (url for url in ["/a", "/b", "/c", "/a"])
+    )
+    assert [result["policy"] for result in results] == [
+        "frequency_recency",
+        "transition",
+    ]
+    assert all(result["input_accesses"] == 4 for result in results)
+    assert all(result["evaluated_predictions"] == 3 for result in results)
+    assert all(
+        result["correct_predictions"] + result["incorrect_predictions"] == 3
+        for result in results
+    )
+
+
+def test_simulation_rejects_unknown_prediction_policy():
+    with pytest.raises(ValueError, match="unknown prediction policy"):
+        run_simulation([], policy="unknown")
 
 
 def test_tracker_csv_replaces_previous_metrics_row(tmp_path):
