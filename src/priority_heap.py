@@ -35,12 +35,6 @@ class MaxHeap:
         self.heap[j].heap_index = j
 
     def is_higher_priority(self, nodeA: CacheNode, nodeB: CacheNode) -> bool:
-        """
-        Returns True if nodeA strictly outranks nodeB.
-        Rule 1: Higher frequency wins.
-        Rule 2: Newer timestamp wins when frequencies are equal.
-        Rule 3: Lexicographically smaller URL wins if both fields are equal.
-        """
         if nodeA.frequency != nodeB.frequency:
             return nodeA.frequency > nodeB.frequency
         if nodeA.last_accessed_timestamp != nodeB.last_accessed_timestamp:
@@ -48,7 +42,6 @@ class MaxHeap:
         return nodeA.url < nodeB.url
     
     def sift_up(self, index: int) -> None:
-        """Bubbles the node at `index` up the heap until max-heap priority is restored."""
         while index > 0:
             parent_idx = (index - 1) // 2
             if self.is_higher_priority(self.heap[index], self.heap[parent_idx]):
@@ -58,7 +51,6 @@ class MaxHeap:
                 break
 
     def sift_down(self, index: int) -> None:
-        """Bubbles the node at `index` down the heap until max-heap priority is restored."""
         size = len(self.heap)
         while True:
             highest = index

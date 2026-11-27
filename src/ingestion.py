@@ -1,14 +1,5 @@
-"""
-ingestion.py - Ingestion pipeline: URL request -> HashMap + MaxHeap update.
-
-Owner: Priyanshi (Hash Map & Ingestion Lead)
-
-Per request:
-    1. Normalize the URL (strip, lowercase); reject if invalid (clock does NOT advance).
-    2. sequence_tick += 1
-    3. Known URL  -> frequency += 1, timestamp = tick, sift_up via heap_index
-       Unseen URL -> create node in map, append to heap, sift_up
-"""
+#ingestion.py - Ingestion pipeline: URL request -> HashMap + MaxHeap update.
+#Owner: Priyanshi and Gauri
 from typing import Iterable, Optional
 
 from cache_map import CustomHashMap, normalize_url
@@ -47,11 +38,6 @@ class IngestionEngine:
         return node
 
     def ingest_stream(self, urls: Iterable) -> int:
-        """
-        Process an iterable/generator one URL at a time. Nothing is buffered,
-        so memory grows with UNIQUE URLs only, not stream length.
-        Returns the number of accepted requests.
-        """
         accepted = 0
         for raw in urls:
             if self.process_request(raw) is not None:

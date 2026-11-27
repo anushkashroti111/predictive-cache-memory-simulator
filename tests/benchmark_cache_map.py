@@ -1,7 +1,5 @@
 """
 Efficiency check for the Hash Map Layer
-Feeds the first N requests from the Hugging Face access logs into
-CustomHashMap and reports time, memory, and bucket-chain statistics.
 """
 
 import argparse
@@ -19,7 +17,6 @@ from workloads import load_web_server_log_urls  # noqa: E402
 
 
 def run_stream(urls):
-    """Push every URL through the map exactly as the pipeline will."""
     cache_map = CustomHashMap()
     for tick, url in enumerate(urls, start=1):
         if cache_map.get(url) is None:

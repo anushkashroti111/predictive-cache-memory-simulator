@@ -1,9 +1,6 @@
 """
 workloads.py
-Traffic generators for the Predictive Cache & Memory Access Simulator.
-
-Synthetic generators return lists of URL strings. The Hugging Face loader
-yields access-log paths one at a time.
+Owner: Shivangi
 """
 
 import random
@@ -14,7 +11,6 @@ WEB_SERVER_LOG_DATASET = "mindweave/web-server-logs"
 
 
 def load_web_server_log_urls(limit=None):
-    """Load request paths from the Hugging Face access logs config."""
     if limit is not None and (
         not isinstance(limit, int) or isinstance(limit, bool) or limit < 0
     ):
@@ -24,8 +20,6 @@ def load_web_server_log_urls(limit=None):
         from datasets import load_dataset
     except ImportError as exc:
         raise RuntimeError(
-            "Loading Hugging Face data requires the 'datasets' package; "
-            "install it with `pip install -r requirements.txt`."
         ) from exc
 
     servers = load_dataset(WEB_SERVER_LOG_DATASET, "servers")
@@ -52,15 +46,13 @@ def load_web_server_log_urls(limit=None):
     return request_paths()
 
 
-# ---------------------------------------------------------------------------
 # Event model
-# ---------------------------------------------------------------------------
 @dataclass
 class NavigationEvent:
     """One user click: moving from one page to another."""
-    step: int              # position in the traffic stream (0, 1, 2, ...)
-    source_url: str        # page the user was on (None for the first request)
-    destination_url: str   # page the user requested
+    step: int             
+    source_url: str        
+    destination_url: str   
 
 
 def to_events(urls):
@@ -73,24 +65,18 @@ def to_events(urls):
     return events
 
 
-# ---------------------------------------------------------------------------
 # Page pool: 50 pages of one website
-# ---------------------------------------------------------------------------
-PAGE_POOL = ["/home"] + [f"/page{i}" for i in range(1, 50)]  # 50 pages
+PAGE_POOL = ["/home"] + [f"/page{i}" for i in range(1, 50)]  
 
 
-# ---------------------------------------------------------------------------
 # Random traffic: no pattern at all (baseline / worst case)
-# ---------------------------------------------------------------------------
 def generate_random_traffic(length=10000, pool=PAGE_POOL, seed=42):
     """Return `length` URLs picked uniformly at random from `pool`."""
     rng = random.Random(seed)  # own generator, so results are reproducible
     return [rng.choice(pool) for _ in range(length)]
 
 
-# ---------------------------------------------------------------------------
 # Looping traffic: A -> B -> C -> A -> B -> C ... (pure recency pattern)
-# ---------------------------------------------------------------------------
 def generate_looping_traffic(length=10000, pattern=None):
     """Return `length` URLs that repeat `pattern` over and over."""
     if pattern is None:
@@ -100,9 +86,7 @@ def generate_looping_traffic(length=10000, pattern=None):
     return [pattern[i % len(pattern)] for i in range(length)]
 
 
-# ---------------------------------------------------------------------------
 # Zipfian traffic: a few pages get most of the clicks (real-world skew)
-# ---------------------------------------------------------------------------
 def generate_zipfian_traffic(length=10000, pool=PAGE_POOL, exponent=1.35, seed=42):
     """
     Return `length` URLs where page popularity follows a Zipf distribution.
@@ -117,9 +101,7 @@ def generate_zipfian_traffic(length=10000, pool=PAGE_POOL, exponent=1.35, seed=4
     return rng.choices(pool, weights=weights, k=length)
 
 
-# ---------------------------------------------------------------------------
 # Quick self-check: run `python workloads.py`
-# ---------------------------------------------------------------------------
 if __name__ == "__main__":
     rand = generate_random_traffic()
     print("Random  :", len(rand), "requests, first 10:", rand[:10])

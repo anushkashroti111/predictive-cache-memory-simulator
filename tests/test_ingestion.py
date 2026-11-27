@@ -1,5 +1,4 @@
-"""Tests for cache_map.py and ingestion.py.
-Run from the repo root:  python -m unittest discover -s tests -v"""
+"""Tests for cache_map.py and ingestion.py."""
 import os
 import random
 import sys
